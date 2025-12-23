@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-swift run
+swift package clean
+rm -rf .build
