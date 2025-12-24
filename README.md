@@ -1,11 +1,8 @@
-
 # GeoHub
 
-GeoHub é uma plataforma **local-first** de dados geográficos construída em **Swift + Vapor**.
-Ela fornece uma API para **descoberta, organização e uso de dados geoespaciais** por meio do padrão
-**STAC (SpatioTemporal Asset Catalog)**, começando pela **Microsoft Planetary Computer**.
+GeoHub é uma plataforma **local-first** de dados geográficos construída em **Swift + Vapor**. Ela expõe uma API para **descoberta, organização e uso de dados geoespaciais** via **STAC (SpatioTemporal Asset Catalog)**, começando pela **Microsoft Planetary Computer**.
 
-O objetivo do projeto é reduzir o tempo gasto em:
+O objetivo é reduzir tempo gasto em:
 - encontrar datasets geográficos,
 - entender metadados e formatos,
 - recortar dados para uma área de interesse (AOI),
@@ -16,42 +13,42 @@ O objetivo do projeto é reduzir o tempo gasto em:
 ## Conceitos principais (explicação amigável)
 
 ### Backend
-O backend é a aplicação que roda no servidor (neste caso, localmente no seu computador).
-Ele recebe requisições, conversa com serviços externos, organiza dados e devolve respostas em JSON.
+Aplicação que roda no servidor (aqui, localmente no seu computador) e expõe endpoints HTTP.
 
 ### API
-Uma API é a forma de conversar com o backend.
-Você envia requisições HTTP (por exemplo, `POST /stac/search`) e recebe respostas estruturadas (JSON).
+Interface para conversar com o backend via HTTP. Você envia requisições e recebe respostas JSON.
 
 ### Endpoint
-Um endpoint é um “endereço” específico da API, por exemplo:
-- `GET /health`
-- `POST /stac/search`
-
-Cada endpoint executa uma função específica do sistema.
+Caminho específico da API, por exemplo: `GET /health` ou `POST /stac/search`.
 
 ### STAC (SpatioTemporal Asset Catalog)
-STAC é um **padrão aberto** para catalogar dados geoespaciais.
-Ele descreve:
-- onde o dado está localizado (região geográfica),
-- quando foi coletado (tempo),
-- quais arquivos existem (assets) e como acessá-los.
+STAC é um **padrão aberto** para catalogar dados geoespaciais no tempo e no espaço. Ele descreve:
+- onde o dado está (região geográfica),
+- quando foi capturado (tempo),
+- quais arquivos existem (assets) e como acessá-los (links/URLs).
 
 Importante:
-> STAC **não é o dado em si**, mas sim o **catálogo e os metadados** que apontam para o dado real.
+> STAC **não é** o dado (imagem/raster) em si; é o **catálogo/metadata** que aponta para os dados reais.
 
 ### Microsoft Planetary Computer
-A Planetary Computer hospeda grandes volumes de dados públicos (satélite, clima, uso do solo, etc.)
-e fornece acesso a eles via uma API STAC padronizada.
+Plataforma que disponibiliza muitos datasets públicos (satélite, clima, uso do solo etc.) e oferece uma API STAC para busca.
 
 ---
 
 ## Funcionalidades implementadas (estado atual)
 
-### `GET /health`
-Endpoint simples para verificar se o servidor está rodando.
+### Página inicial (UI estática)
+- `GET /` serve `Public/index.html` como página padrão.
+- `GET /index.html` também funciona.
 
-Exemplo de resposta:
+Observação:
+- O Vapor não faz “index automático” por padrão. Para que `/` sirva `index.html`, existe uma rota explícita em `routes.swift`.
+- O `FileMiddleware` também está habilitado para servir arquivos estáticos em `Public/` (útil para JS/CSS no futuro).
+
+### Saúde do servidor
+- `GET /health` retorna um JSON simples com status e timestamp.
+
+Exemplo:
 ```json
 {
   "status": "ok",
@@ -59,109 +56,141 @@ Exemplo de resposta:
 }
 ```
 
-### `POST /stac/search`
-Realiza uma busca tipada (100% tipada em Swift) no catálogo STAC da Planetary Computer
-e retorna o JSON bruto do STAC.
+### Busca STAC + normalização + persistência local
+- `POST /stac/search`:
+  1) busca no STAC da Planetary Computer
+  2) salva o JSON bruto em `data/raw/<datasetId>.json`
+  3) normaliza para um modelo interno (`Dataset`)
+  4) salva em `data/datasets/<datasetId>.json`
+  5) retorna o `Dataset` normalizado
 
-Exemplo de requisição:
-```bash
-curl -X POST http://localhost:8080/stac/search \
-  -H "Content-Type: application/json" \
-  -d '{
-    "collections": ["sentinel-2-l2a"],
-    "bbox": [-43.8, -23.1, -43.1, -22.7],
-    "datetime": "2025-01-01/2025-01-31",
-    "limit": 5
-  }'
-```
-
-Resposta típica:
-```json
-{
-  "type": "FeatureCollection",
-  "...": "..."
-}
-```
+### Catálogo local (datasets persistidos)
+- `GET /datasets` lista datasets salvos localmente.
+- `GET /datasets/:id` retorna um dataset específico.
 
 ---
 
-## Estrutura do projeto
+## Estrutura do projeto (alto nível)
 
 ```
-Sources/GeoHub/
-├── App/
-│   └── Controllers/
-│       ├── HealthController.swift
-│       └── StacController.swift
-│
-├── Core/
-│   └── Stac/
-│       ├── StacModels.swift
-│       └── StacClient.swift
-│
-├── routes.swift
-└── ...
+GeoHub/
+├── Public/
+│   └── index.html                 # página inicial
+├── Sources/GeoHub/
+│   ├── App/
+│   │   └── Controllers/           # endpoints HTTP (camada web)
+│   ├── Core/                      # modelos + STAC + normalização (camada de domínio)
+│   ├── Services/                  # storage e infra (camada de serviços)
+│   └── routes.swift               # registro de rotas
+├── data/
+│   ├── raw/                       # JSON bruto do STAC (gerado em runtime)
+│   └── datasets/                  # Dataset normalizado (gerado em runtime)
+├── Makefile
+└── scripts/
 ```
-
-### Organização
-- **App/**: camada web (Vapor, controllers, rotas, HTTP).
-- **Core/**: lógica de domínio e clientes externos (portável).
-- **Services/** (futuro): storage, jobs, cache, engines de processamento.
 
 ---
 
 ## Requisitos
 
-- macOS (Apple Silicon funciona normalmente)
+- macOS (Apple Silicon funciona)
 - Xcode (toolchain Swift)
 - Homebrew (recomendado)
-- `entr` (opcional, para auto-restart em desenvolvimento)
+- `entr` (recomendado, para auto-restart em desenvolvimento)
 
 ---
 
-## Como rodar o projeto
+## Como rodar
 
-### Instalar dependência opcional (auto-restart)
+### 1) Instalar dependência de desenvolvimento (auto-restart)
 ```bash
 brew install entr
 ```
 
-### Rodar em modo desenvolvimento (auto-restart)
+### 2) Rodar em modo desenvolvimento (auto-restart)
 ```bash
 make dev
 ```
+Isso observa mudanças em `Sources/**/*.swift` e reinicia o servidor automaticamente.
 
-### Rodar apenas uma vez
+### 3) Rodar apenas uma vez (sem watcher)
 ```bash
 make run
 ```
 
-Servidor disponível em:
+Servidor por padrão:
+- http://127.0.0.1:8080/
+
+---
+
+## Testes rápidos
+
+### Página inicial
+- http://127.0.0.1:8080/
+- http://127.0.0.1:8080/index.html
+
+### Health check
+```bash
+curl -s http://localhost:8080/health | jq
 ```
-http://127.0.0.1:8080
+
+### Buscar no STAC e persistir localmente
+```bash
+curl -s -X POST http://localhost:8080/stac/search   -H "Content-Type: application/json"   -d '{
+    "collections":["sentinel-2-l2a"],
+    "bbox":[-43.8,-23.1,-43.1,-22.7],
+    "datetime":"2025-01-01/2025-01-31",
+    "limit":5
+  }' | jq '.id, (.items | length)'
+```
+
+### Listar datasets locais
+```bash
+curl -s http://localhost:8080/datasets | jq 'length'
+```
+
+### Consultar dataset por id
+```bash
+curl -s http://localhost:8080/datasets/<ID_AQUI> | jq '.id, .source, (.items | length)'
 ```
 
 ---
 
-## Comandos úteis
+## Dados gerados e Git
 
-- `make dev`   → roda o servidor com reinício automático
-- `make run`   → roda o servidor uma vez
-- `make test`  → executa testes
-- `make fmt`   → formata o código (requer swift-format)
-- `make clean` → limpa artifacts de build
+A pasta `data/` é **gerada em runtime** (a cada requisição), então **não deve ser versionada**.
+
+Sugestão para `.gitignore`:
+```gitignore
+data/
+.build/
+.DS_Store
+```
+
+Se você quiser manter a pasta `data/` visível no repositório:
+1) crie `data/.gitkeep`
+2) ignore o restante:
+
+```gitignore
+data/*
+!data/.gitkeep
+```
 
 ---
 
 ## Próximos passos (planejados)
 
-- Normalização dos resultados STAC em modelos internos (`Dataset`)
-- Persistência local (JSON → SQLite)
-- Sistema de jobs para operações demoradas (recorte, estatísticas)
-- Visualização geográfica (Leaflet, tiles XYZ)
-- Integração opcional com engine Python para geoprocessamento pesado
+### Opção A — Visualização (Leaflet)
+- UI em `Public/` para listar datasets (`GET /datasets`)
+- desenhar `bbox`/footprints no mapa
+- facilitar exploração de coleções e áreas de interesse
+
+### Opção B — Jobs + engine Python (processamento)
+- fila simples de jobs (assíncronos) para operações demoradas
+- integração opcional com Python (rasterio/xarray/geopandas)
+- operações típicas: recorte, estatísticas, geração de tiles
 
 ---
 
 ## Licença
-Projeto educacional / experimental para aprendizado e prototipagem.
+Projeto educacional/experimental para prototipagem e aprendizado.
