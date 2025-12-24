@@ -15,4 +15,8 @@ func routes(_ app: Application) throws {
     let datasets = DatasetsController()
     app.get("datasets", use: datasets.list)
     app.get("datasets", ":id", use: datasets.get)
+
+    let jobs = JobsController()
+    app.post("jobs", use: jobs.create)
+    app.get("jobs", use: jobs.list)
 }
