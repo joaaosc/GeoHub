@@ -1,0 +1,3 @@
+Dockerfile linguist-detectable=false
+docker-compose.yml linguist-detectable=false
+*.dockerfile linguist-detectable=false
